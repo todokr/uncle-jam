@@ -1,7 +1,7 @@
-// Turns the single-file snapshot into many: one job = one snapshot file
-// under SNAPSHOTS_DIR. engine.ts doesn't change at all — a "job" is just
-// a snapshot path, so the kanban board and the CLI both point run() at
-// whichever path they care about.
+// 1ファイルだったスナップショットを複数に分割する: 1ジョブ = 1スナップ
+// ショットファイルとしてSNAPSHOTS_DIR配下に置く。engine.tsは一切変更
+// していない — 「ジョブ」とは単にスナップショットのパスでしかないので、
+// カンバンボードもCLIも、それぞれ興味のあるパスに向けてrun()を呼ぶだけ。
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, unlink } from "node:fs/promises";
@@ -11,7 +11,7 @@ import { load, type Snapshot } from "./snapshot.js";
 export const SNAPSHOTS_DIR = path.resolve(process.cwd(), "snapshots");
 
 export function newJobId(): string {
-  // Timestamp prefix keeps directory listings sorted by creation order.
+  // タイムスタンプを先頭に付けることで、ディレクトリ一覧が作成順に並ぶ。
   return `${Date.now()}-${randomUUID().slice(0, 8)}`;
 }
 
