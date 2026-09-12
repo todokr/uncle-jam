@@ -5,7 +5,13 @@
   "type": "module",
   "description": "Minimal state-machine + snapshot workflow engine, built to understand the core of Mastra-style durable workflows.",
   "scripts": {
-    "run": "node cli.js run",
-    "resume": "node cli.js resume"
+    "build": "tsc",
+    "run": "npm run build && node dist/cli.js run",
+    "resume": "npm run build && node dist/cli.js resume",
+    "reset": "npm run build && node dist/cli.js reset"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
   }
 }
