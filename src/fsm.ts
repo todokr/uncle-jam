@@ -1,6 +1,6 @@
-// The "state machine" piece: a tiny, explicit finite state machine.
-// Mastra uses XState for this; here we hand-roll the same idea so every
-// transition is visible instead of hidden inside a library.
+// 「状態機械」の部分: 小さく明示的な有限状態機械。
+// Mastra本体はここをXStateに任せているが、ここでは同じ考え方を自前で
+// 実装し、遷移がライブラリの裏に隠れず全部見えるようにしている。
 
 export type State = "pending" | "running" | "suspended" | "completed" | "failed";
 export type Event = "start" | "step" | "suspend" | "complete" | "fail" | "resume";

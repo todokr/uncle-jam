@@ -1,5 +1,6 @@
-// The "snapshot" piece: the entire run is a plain serializable object,
-// written to disk after every step so a crash loses at most one step.
+// 「スナップショット」の部分: 実行状態全体をただのシリアライズ可能な
+// オブジェクトとして扱い、ステップが進むたびにディスクへ書き出す。
+// これによりクラッシュしても失うのは最大1ステップ分だけになる。
 
 import { readFile, writeFile, rm, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";

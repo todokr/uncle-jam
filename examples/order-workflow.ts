@@ -1,7 +1,7 @@
-// Three steps chained together, the same shape as Mastra's
-// `.then(stepA).then(stepB).then(stepC)`. The middle step suspends until
-// someone supplies an external signal (an "approval"), which is the case
-// a plain linear script can't express but a state machine + snapshot can.
+// 3つのステップを繋いだもので、形はMastraの
+// `.then(stepA).then(stepB).then(stepC)`と同じ。真ん中のステップは
+// 誰かが外部から合図（「承認」）を与えるまでsuspendする。これは単純な
+// 直列スクリプトでは表現できないが、状態機械+スナップショットなら書ける。
 
 import type { Step } from "../src/engine.js";
 
@@ -16,8 +16,8 @@ export interface ApprovalResumeData {
   approved: boolean;
 }
 
-// Purely cosmetic: makes each step take a visible moment, so the kanban
-// board's "running" column isn't just a flash between two polls.
+// 見た目だけの都合: 各ステップに目に見える時間をかけることで、カンバン
+// ボードの「running」列が2回のポーリングの間に一瞬で消えないようにする。
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const orderWorkflow: Step<OrderContext, ApprovalResumeData>[] = [

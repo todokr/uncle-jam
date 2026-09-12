@@ -1,9 +1,9 @@
-// Kanban UI on top of the engine: each job is its own snapshot file, and
-// this server exposes them as a small REST-ish API. Creating or resuming
-// a job returns immediately (202) — the actual run() happens in the
-// background — so the board can show a job moving through
-// pending -> running -> suspended/completed/failed instead of only ever
-// seeing the state a synchronous call would have returned in.
+// エンジンの上に載せたカンバンUI: 各ジョブは自分専用のスナップショット
+// ファイルを持ち、このサーバーはそれらを小さなREST風APIとして公開する。
+// ジョブの作成/再開は即座に(202を)返し、実際のrun()はバックグラウンドで
+// 実行される — こうすることでボードは、同期呼び出しなら開始時と終了時の
+// 状態しか返せないところを、pending -> running -> suspended/completed/failed
+// と移り変わっていく様子として見せられる。
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -61,7 +61,7 @@ const server = createServer(async (req, res) => {
         context: { orderId: orderId?.trim() || "ORDER-1" },
         history: [],
       };
-      await save(jobPath(id), initial); // visible to GET /api/jobs before run() even starts
+      await save(jobPath(id), initial); // run()が始まる前からGET /api/jobsに見えるようにしておく
       runInBackground(id, { context: initial.context as OrderContext });
       sendJson(res, 202, { id, ...initial });
       return;

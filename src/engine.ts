@@ -1,7 +1,7 @@
-// The "worker loop" piece, kept intentionally thin: it just drives the
-// state machine forward one step at a time and snapshots after each move.
-// (Mastra can hand this loop off to Inngest/Temporal for real durability;
-// here it's a single process so the mechanism stays visible.)
+// 「ワーカーループ」の部分。意図的に薄く保ってあり、状態機械を1ステップずつ
+// 前に進め、動くたびにスナップショットを取るだけ。
+// （Mastraはこのループの実行主体をInngest/Temporalに委譲することで本当の
+// 耐久実行にできるが、ここでは仕組みを見せるために1プロセスにしている。）
 
 import { StateMachine } from "./fsm.js";
 import { save, load, clear, type Snapshot } from "./snapshot.js";
@@ -51,9 +51,10 @@ export async function run<TContext, TResumeData = unknown>(
   }
 
   if (snapshot.state !== fsm.state) {
-    // Persist "running" right away, before the (possibly slow) step runs,
-    // so anything polling the snapshot can observe the in-progress state
-    // instead of only ever seeing the state it started and ended in.
+    // （時間のかかるかもしれない）ステップを実行する前に"running"を
+    // 即座に永続化しておく。こうすることでスナップショットを
+    // ポーリングしている側が、開始時と終了時の状態しか見えないのではなく、
+    // 実行中の状態も観測できるようになる。
     snapshot.state = fsm.state;
     await save(snapshotPath, snapshot);
   }
@@ -88,7 +89,7 @@ export async function run<TContext, TResumeData = unknown>(
     delete snapshot.waitingOn;
     fsm.send("step");
     snapshot.state = fsm.state;
-    await save(snapshotPath, snapshot); // <- durability point: one crash costs one step, not the whole run
+    await save(snapshotPath, snapshot); // <- 耐久性のポイント: クラッシュしても失うのは全実行ではなく1ステップ分だけ
   }
 
   fsm.send("complete");
