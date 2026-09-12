@@ -143,14 +143,36 @@ async execute(context, resumeData) {
 中で`await`し続けるのではなく、いったんプロセスを終了してよい
 （＝suspend状態でスナップショットを保存して`return`する）のがポイントです。
 
-### `src/server.ts` + `public/index.html` — 中身が見えるUI
+### `src/jobStore.ts` + カンバンUI — 複数ジョブを同時に見る
 
-UIは飾りではなく「状態機械の今の状態」と「スナップショットの中身」を
-そのまま可視化するためだけに存在します。`GET /api/state`が
-`load()`した生のスナップショットをそのまま返し、画面はそれを
-5つの状態ボックスとJSONとして表示するだけです。ボタンは`POST /api/run`
-`/api/resume``/api/reset`を叩くだけで、裏側は`cli.ts`が呼んでいるのと
-まったく同じ`run()`関数です。つまりCLI版とUI版は「同じエンジンに対する
+ここまでは「1つのワークフローの実行」を1つの`snapshot.json`で表していました。
+実際の工場ラインには複数のジョブが同時に流れているので、それを見るには
+「1ジョブ = 1スナップショットファイル」に分割するだけで足ります。
+状態機械やエンジンのコードは一切変えていません。`run()`に渡す
+`snapshotPath`を`snapshots/<jobId>.json`にしただけです。
+
+```ts
+export function jobPath(id: string): string {
+  return path.join(SNAPSHOTS_DIR, `${id}.json`);
+}
+```
+
+カンバンUIの5つの列（pending/running/suspended/completed/failed）は
+そのまま`fsm.ts`の5つの状態に対応しています。`GET /api/jobs`は
+`snapshots/`配下の全ファイルを読んで、その`state`でグルーピングして
+返しているだけです。
+
+もう1つ重要な変更が`src/server.ts`にあります。ジョブを作る
+`POST /api/jobs`は`run()`の完了を待たずに202を返し、`run()`は
+バックグラウンドで進みます（fire-and-forget）。これによって
+「1回のHTTPリクエスト」と「1回のワークフロー実行」が分離されました。
+これはAIエージェントの工場ラインでもまったく同じ形になります —
+「タスクを積む」というリクエストと、「エージェントがそのタスクを
+実際にこなす」処理は別物で、後者は数分〜数時間かかることもあるからです。
+カンバンボードは0.7秒ごとに`GET /api/jobs`をポーリングしているだけの
+単純な実装ですが、これで「バックグラウンドで動いているジョブの今」を
+見ることができます。`cli.ts`は`snapshots/default.json`という1つの
+決め打ちジョブを見ているだけで、UIとCLIは「同じ`run()`エンジンに対する
 2つの入り口」でしかありません。
 
 ## 4. 実際に動かしてみる
@@ -160,10 +182,14 @@ npm install
 npm run serve         # http://localhost:3000 でUIが立つ
 ```
 
-ブラウザで開いて、order idを入れて`run`を押すと`waitForApproval`で
-`suspended`になります（ブラウザをリロードしても、サーバーを再起動しても
-状態は消えません — `snapshot.json`に書かれているからです）。`approve`を
-押すと`completed`まで進み、`reject`なら`failed`になります。
+ブラウザで開いて、order idを入れて`run new job`を押すと`pending`列に
+ジョブが現れ、すぐ`running`列へ移り（`validate`ステップに1.5秒のsleepが
+入れてある）、その後`waiting for approval`列で止まります（ブラウザを
+リロードしても、サーバーを再起動しても状態は消えません — `snapshots/`配下の
+JSONファイルに書かれているからです）。`approve`を押すと再び`running`を
+経て`completed`まで進み、`reject`なら`failed`になります。複数のorder idで
+同時に`run new job`すれば、ボード上で複数ジョブが並行に流れているのも
+見えます。
 
 CLIから同じことをする場合:
 

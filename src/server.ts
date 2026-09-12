@@ -1,24 +1,25 @@
-// Minimal UI on top of the engine: a static page + a tiny JSON API.
-// No framework — just node:http — so the "UI" doesn't hide how thin the
-// actual factory line (state machine + snapshot) really is.
+// Kanban UI on top of the engine: each job is its own snapshot file, and
+// this server exposes them as a small REST-ish API. Creating or resuming
+// a job returns immediately (202) — the actual run() happens in the
+// background — so the board can show a job moving through
+// pending -> running -> suspended/completed/failed instead of only ever
+// seeing the state a synchronous call would have returned in.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { run, clearSnapshot } from "./engine.js";
-import { load, type Snapshot } from "./snapshot.js";
+import { run, type RunOptions } from "./engine.js";
+import { save, type Snapshot } from "./snapshot.js";
+import { newJobId, jobPath, listJobs, removeJob } from "./jobStore.js";
 import { orderWorkflow, type OrderContext, type ApprovalResumeData } from "../examples/order-workflow.js";
 
-const SNAPSHOT_PATH = path.resolve(process.cwd(), "snapshot.json");
 const INDEX_HTML_PATH = path.resolve(process.cwd(), "public/index.html");
 const PORT = Number(process.env.PORT ?? 3000);
 
-const EMPTY_STATE: Snapshot<Partial<OrderContext>> = {
-  state: "pending",
-  stepIndex: 0,
-  context: {},
-  history: [],
-};
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
 
 async function readJsonBody<T>(req: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
@@ -27,19 +28,17 @@ async function readJsonBody<T>(req: IncomingMessage): Promise<T> {
   return raw ? (JSON.parse(raw) as T) : ({} as T);
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(payload);
-}
-
-async function currentState(): Promise<Snapshot<Partial<OrderContext>>> {
-  return (await load<Partial<OrderContext>>(SNAPSHOT_PATH)) ?? EMPTY_STATE;
+function runInBackground(id: string, options: RunOptions<OrderContext, ApprovalResumeData>): void {
+  run<OrderContext, ApprovalResumeData>(orderWorkflow, jobPath(id), options).catch((err) => {
+    console.error(`[job ${id}] failed:`, (err as Error).message);
+  });
 }
 
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+    const resumeMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)\/resume$/);
+    const jobMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)$/);
 
     if (req.method === "GET" && url.pathname === "/") {
       const html = await readFile(INDEX_HTML_PATH, "utf8");
@@ -48,36 +47,42 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && url.pathname === "/api/state") {
-      sendJson(res, 200, await currentState());
+    if (req.method === "GET" && url.pathname === "/api/jobs") {
+      sendJson(res, 200, await listJobs<Partial<OrderContext>>());
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/run") {
+    if (req.method === "POST" && url.pathname === "/api/jobs") {
       const { orderId } = await readJsonBody<{ orderId?: string }>(req);
-      const snapshot = await run<OrderContext, ApprovalResumeData>(orderWorkflow, SNAPSHOT_PATH, {
+      const id = newJobId();
+      const initial: Snapshot<Partial<OrderContext>> = {
+        state: "pending",
+        stepIndex: 0,
         context: { orderId: orderId?.trim() || "ORDER-1" },
-      });
-      sendJson(res, 200, snapshot);
+        history: [],
+      };
+      await save(jobPath(id), initial); // visible to GET /api/jobs before run() even starts
+      runInBackground(id, { context: initial.context as OrderContext });
+      sendJson(res, 202, { id, ...initial });
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/resume") {
+    if (req.method === "POST" && resumeMatch) {
+      const id = resumeMatch[1]!;
       const { approved } = await readJsonBody<{ approved?: boolean }>(req);
       if (typeof approved !== "boolean") {
         sendJson(res, 400, { error: "approved must be a boolean" });
         return;
       }
-      const snapshot = await run<OrderContext, ApprovalResumeData>(orderWorkflow, SNAPSHOT_PATH, {
-        resumeData: { approved },
-      });
-      sendJson(res, 200, snapshot);
+      runInBackground(id, { resumeData: { approved } });
+      sendJson(res, 202, { id });
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/reset") {
-      await clearSnapshot(SNAPSHOT_PATH);
-      sendJson(res, 200, EMPTY_STATE);
+    if (req.method === "DELETE" && jobMatch) {
+      await removeJob(jobMatch[1]!);
+      res.writeHead(204);
+      res.end();
       return;
     }
 

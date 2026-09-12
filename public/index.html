@@ -7,134 +7,159 @@
   :root { color-scheme: light dark; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    max-width: 720px;
+    max-width: 1100px;
     margin: 2rem auto;
     padding: 0 1rem;
     line-height: 1.5;
   }
   h1 { font-size: 1.25rem; }
-  .states {
+  form.new-job {
     display: flex;
     gap: 0.5rem;
-    flex-wrap: wrap;
-    margin: 1rem 0;
+    align-items: center;
+    margin: 1rem 0 1.5rem;
   }
-  .state {
-    border: 1px solid #8888;
-    border-radius: 6px;
-    padding: 0.4rem 0.75rem;
-    font-size: 0.85rem;
-    opacity: 0.5;
+  form.new-job input {
+    padding: 0.4rem;
+    flex: 1;
   }
-  .state.active {
-    opacity: 1;
-    font-weight: bold;
-    border-color: #4a90d9;
-    background: #4a90d922;
-  }
-  .state.active.failed { border-color: #d94a4a; background: #d94a4a22; }
-  .state.active.completed { border-color: #4ad97a; background: #4ad97a22; }
-  fieldset { border: 1px solid #8885; border-radius: 6px; margin: 1rem 0; }
-  label { display: block; margin: 0.5rem 0 0.2rem; font-size: 0.85rem; }
-  input { padding: 0.3rem; width: 100%; box-sizing: border-box; }
   button {
     padding: 0.4rem 0.9rem;
-    margin: 0.5rem 0.5rem 0 0;
     cursor: pointer;
   }
-  button:disabled { cursor: not-allowed; opacity: 0.5; }
-  pre {
-    background: #8881;
-    padding: 0.75rem;
-    border-radius: 6px;
+  .board {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(180px, 1fr));
+    gap: 0.75rem;
     overflow-x: auto;
+  }
+  .column {
+    border: 1px solid #8885;
+    border-radius: 8px;
+    padding: 0.5rem;
+    min-height: 200px;
+    background: #8881;
+  }
+  .column h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+    margin: 0.25rem 0 0.5rem;
+  }
+  .card {
+    background: canvas;
+    border: 1px solid #8886;
+    border-radius: 6px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
     font-size: 0.8rem;
   }
-  .error { color: #d94a4a; }
+  .card.failed { border-color: #d94a4a; }
+  .card.completed { border-color: #4ad97a; }
+  .card.suspended { border-color: #e0a63a; }
+  .card .orderId { font-weight: bold; }
+  .card .id { opacity: 0.5; font-size: 0.7rem; word-break: break-all; }
+  .card .lastStep { margin: 0.35rem 0; opacity: 0.85; }
+  .card .actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+  .card .actions button { padding: 0.2rem 0.5rem; font-size: 0.75rem; }
+  .card .error { color: #d94a4a; font-size: 0.75rem; }
+  .empty { opacity: 0.4; font-size: 0.75rem; }
 </style>
 </head>
 <body>
-  <h1>uncle-jam — state machine + snapshot workflow</h1>
-  <p>ワークフロー: <code>validate → waitForApproval → ship</code>（<code>waitForApproval</code>は外部承認が来るまでsuspendする）</p>
+  <h1>uncle-jam — job kanban</h1>
+  <p>ワークフロー: <code>validate → waitForApproval → ship</code>。
+     ジョブを作ると裏で非同期に進み、状態が変わるたびにこのボードへ反映される。</p>
 
-  <div class="states" id="states"></div>
+  <form class="new-job" id="newJobForm">
+    <input id="orderId" placeholder="order id" value="ORDER-1" />
+    <button type="submit">run new job</button>
+  </form>
 
-  <fieldset>
-    <legend>run</legend>
-    <label for="orderId">order id</label>
-    <input id="orderId" value="ORDER-1" />
-    <button id="runBtn">run</button>
-  </fieldset>
-
-  <fieldset>
-    <legend>suspended stepへの応答</legend>
-    <button id="approveBtn">approve</button>
-    <button id="rejectBtn">reject</button>
-  </fieldset>
-
-  <fieldset>
-    <legend>snapshot</legend>
-    <button id="resetBtn">reset</button>
-  </fieldset>
-
-  <p id="errorMsg" class="error"></p>
-  <pre id="snapshot"></pre>
+  <div class="board" id="board"></div>
 
   <script>
-    const STATES = ["pending", "running", "suspended", "completed", "failed"];
-    const statesEl = document.getElementById("states");
-    const snapshotEl = document.getElementById("snapshot");
-    const errorEl = document.getElementById("errorMsg");
-    const approveBtn = document.getElementById("approveBtn");
-    const rejectBtn = document.getElementById("rejectBtn");
+    const COLUMNS = [
+      ["pending", "pending"],
+      ["running", "running"],
+      ["suspended", "waiting for approval"],
+      ["completed", "completed"],
+      ["failed", "failed"],
+    ];
 
-    function renderStates(current) {
-      statesEl.innerHTML = "";
-      for (const s of STATES) {
-        const div = document.createElement("div");
-        div.className = "state" + (s === current ? ` active ${s}` : "");
-        div.textContent = s;
-        statesEl.appendChild(div);
+    const board = document.getElementById("board");
+
+    function cardHtml(job) {
+      const orderId = job.context?.orderId ?? "(unknown)";
+      const lastStep = job.history?.length ? job.history[job.history.length - 1] : null;
+      const parts = [
+        `<div class="orderId">${orderId}</div>`,
+        `<div class="id">${job.id}</div>`,
+      ];
+      if (lastStep) parts.push(`<div class="lastStep">${lastStep.step}: ${lastStep.status}</div>`);
+      if (job.error) parts.push(`<div class="error">${job.error}</div>`);
+
+      const actions = [];
+      if (job.state === "suspended") {
+        actions.push(`<button data-action="approve" data-id="${job.id}">approve</button>`);
+        actions.push(`<button data-action="reject" data-id="${job.id}">reject</button>`);
       }
+      if (job.state === "completed" || job.state === "failed") {
+        actions.push(`<button data-action="remove" data-id="${job.id}">remove</button>`);
+      }
+      if (actions.length) parts.push(`<div class="actions">${actions.join("")}</div>`);
+
+      return `<div class="card ${job.state}">${parts.join("")}</div>`;
     }
 
-    function render(snapshot) {
-      renderStates(snapshot.state);
-      snapshotEl.textContent = JSON.stringify(snapshot, null, 2);
-      const suspended = snapshot.state === "suspended";
-      approveBtn.disabled = !suspended;
-      rejectBtn.disabled = !suspended;
-    }
-
-    async function call(url, body) {
-      errorEl.textContent = "";
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "request failed");
-        render(data);
-      } catch (err) {
-        errorEl.textContent = err.message;
+    function render(jobs) {
+      board.innerHTML = "";
+      for (const [state, label] of COLUMNS) {
+        const column = document.createElement("div");
+        column.className = "column";
+        const jobsInColumn = jobs.filter((j) => j.state === state);
+        column.innerHTML =
+          `<h2>${label} (${jobsInColumn.length})</h2>` +
+          (jobsInColumn.length ? jobsInColumn.map(cardHtml).join("") : `<div class="empty">no jobs</div>`);
+        board.appendChild(column);
       }
     }
 
     async function refresh() {
-      const res = await fetch("/api/state");
+      const res = await fetch("/api/jobs");
       render(await res.json());
     }
 
-    document.getElementById("runBtn").addEventListener("click", () => {
-      call("/api/run", { orderId: document.getElementById("orderId").value });
+    document.getElementById("newJobForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const orderId = document.getElementById("orderId").value;
+      await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      refresh();
     });
-    approveBtn.addEventListener("click", () => call("/api/resume", { approved: true }));
-    rejectBtn.addEventListener("click", () => call("/api/resume", { approved: false }));
-    document.getElementById("resetBtn").addEventListener("click", () => call("/api/reset"));
+
+    board.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const { action, id } = btn.dataset;
+      if (action === "approve" || action === "reject") {
+        await fetch(`/api/jobs/${id}/resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approved: action === "approve" }),
+        });
+      } else if (action === "remove") {
+        await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      }
+      refresh();
+    });
 
     refresh();
+    setInterval(refresh, 700);
   </script>
 </body>
 </html>

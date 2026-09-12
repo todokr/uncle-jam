@@ -16,11 +16,16 @@ export interface ApprovalResumeData {
   approved: boolean;
 }
 
+// Purely cosmetic: makes each step take a visible moment, so the kanban
+// board's "running" column isn't just a flash between two polls.
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const orderWorkflow: Step<OrderContext, ApprovalResumeData>[] = [
   {
     id: "validate",
     async execute(context) {
       console.log(`[validate] checking order ${context.orderId}`);
+      await sleep(1500);
       if (!context.orderId) {
         return { status: "fail", error: new Error("orderId is required") };
       }
@@ -45,6 +50,7 @@ export const orderWorkflow: Step<OrderContext, ApprovalResumeData>[] = [
     id: "ship",
     async execute(context) {
       console.log(`[ship] shipping order ${context.orderId}`);
+      await sleep(1500);
       return { status: "continue", context: { ...context, shipped: true } };
     },
   },

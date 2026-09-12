@@ -20,27 +20,33 @@ typescript/@types/nodeのみ）。「Software Factory」を、設計→実装→
 - `examples/order-workflow.ts` — `validate -> waitForApproval -> ship` という
   3ステップのワークフロー例。`waitForApproval` は外部からの承認が来るまで
   `suspend` して止まる、単純な直列スクリプトでは書けない挙動のデモ。
-- `src/server.ts` + `public/index.html` — 上記と同じ`run()`を叩くだけの
-  最小UI。状態機械の現在地とスナップショットの中身をそのまま可視化する。
+- `src/jobStore.ts` — 1ジョブ = 1スナップショットファイルとして、
+  `snapshots/`配下に複数ジョブを並行管理するための薄いラッパー。
+- `src/server.ts` + `public/index.html` — 複数ジョブの実行状況を見る
+  カンバンUI。ジョブ作成/承認は裏で非同期に`run()`が進み、状態が
+  変わるたびにボードへ反映される（`pending → running → suspended →
+  running → completed`のような遷移がポーリングで見える）。
 
 ## 使い方
 
-### UI
+### カンバンUI
 
 ```sh
 npm install
 npm run serve   # http://localhost:3000
 ```
 
-order idを入力して`run` → `suspended`になったら`approve`/`reject` → `reset`
-で最初から、という一連の流れをブラウザから試せる。
+order idを入力して`run new job`を押すとジョブが作られ、裏で非同期に
+`validate`が進む(1.5秒)。`waiting for approval`列に来たら`approve`/`reject`。
+`completed`/`failed`のカードは`remove`で消せる。複数ジョブを同時に走らせて
+カンバン上で並行に動くところも試せる。
 
-### CLI
+### CLI（単一ジョブ）
 
 ```sh
-npm install                    # typescript / @types/node を取得
+npm install                          # typescript / @types/node を取得
 npm run run -- --order-id ORDER-42   # ビルドしてvalidateまで進みsuspend
-cat snapshot.json                    # 止まった時点の状態が見える
+cat snapshots/default.json           # 止まった時点の状態が見える
 npm run resume -- --approve          # 別プロセスから再開してcompletedまで進む
 npm run resume -- --reject           # 却下してfailedにする場合
 npm run reset                        # スナップショットを消して最初からやり直す
@@ -48,3 +54,6 @@ npm run reset                        # スナップショットを消して最�
 
 `resume`は`run`とは別のプロセス起動でも、スナップショットさえ残っていれば
 続きから再開できる。これが「状態機械 + snapshot」で得られる耐久性の最小例。
+CLIは`snapshots/default.json`という決め打ちの1ジョブを、UIは
+`snapshots/*.json`の複数ジョブを見ているだけで、どちらも同じ`run()`を
+呼んでいる。

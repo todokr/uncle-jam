@@ -50,6 +50,14 @@ export async function run<TContext, TResumeData = unknown>(
     fsm.send("resume");
   }
 
+  if (snapshot.state !== fsm.state) {
+    // Persist "running" right away, before the (possibly slow) step runs,
+    // so anything polling the snapshot can observe the in-progress state
+    // instead of only ever seeing the state it started and ended in.
+    snapshot.state = fsm.state;
+    await save(snapshotPath, snapshot);
+  }
+
   let pendingResumeData = resumeData;
 
   while (fsm.state === "running" && snapshot.stepIndex < workflow.length) {
