@@ -8,7 +8,8 @@
     "build": "tsc",
     "run": "npm run build && node dist/cli.js run",
     "resume": "npm run build && node dist/cli.js resume",
-    "reset": "npm run build && node dist/cli.js reset"
+    "reset": "npm run build && node dist/cli.js reset",
+    "serve": "npm run build && node dist/src/server.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",

@@ -5,6 +5,8 @@ Mastraのworkflowエンジンの核（状態機械 + ステップ単位のスナ
 typescript/@types/nodeのみ）。「Software Factory」を、設計→実装→テストを
 自律的にこなす工場ラインとして理解するための土台。
 
+解説は [docs/textbook.md](docs/textbook.md) にまとめてある。
+
 ## 構成
 
 - `src/fsm.ts` — 状態機械そのもの。`pending -> running -> (suspended|completed|failed)`
@@ -18,8 +20,22 @@ typescript/@types/nodeのみ）。「Software Factory」を、設計→実装→
 - `examples/order-workflow.ts` — `validate -> waitForApproval -> ship` という
   3ステップのワークフロー例。`waitForApproval` は外部からの承認が来るまで
   `suspend` して止まる、単純な直列スクリプトでは書けない挙動のデモ。
+- `src/server.ts` + `public/index.html` — 上記と同じ`run()`を叩くだけの
+  最小UI。状態機械の現在地とスナップショットの中身をそのまま可視化する。
 
 ## 使い方
+
+### UI
+
+```sh
+npm install
+npm run serve   # http://localhost:3000
+```
+
+order idを入力して`run` → `suspended`になったら`approve`/`reject` → `reset`
+で最初から、という一連の流れをブラウザから試せる。
+
+### CLI
 
 ```sh
 npm install                    # typescript / @types/node を取得
