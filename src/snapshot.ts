@@ -1,7 +1,8 @@
 // The "snapshot" piece: the entire run is a plain serializable object,
 // written to disk after every step so a crash loses at most one step.
 
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { readFile, writeFile, rm, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { State } from "./fsm.js";
 
 export interface HistoryEntry {
@@ -19,6 +20,7 @@ export interface Snapshot<TContext> {
 }
 
 export async function save<TContext>(path: string, snapshot: Snapshot<TContext>): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(snapshot, null, 2));
 }
 

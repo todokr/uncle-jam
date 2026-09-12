@@ -1,9 +1,9 @@
-import path from "node:path";
 import { run, clearSnapshot } from "./src/engine.js";
 import { orderWorkflow, type OrderContext, type ApprovalResumeData } from "./examples/order-workflow.js";
 import type { Snapshot } from "./src/snapshot.js";
+import { jobPath } from "./src/jobStore.js";
 
-const SNAPSHOT_PATH = path.resolve(process.cwd(), "snapshot.json");
+const SNAPSHOT_PATH = jobPath("default");
 
 const [, , command, ...args] = process.argv;
 
