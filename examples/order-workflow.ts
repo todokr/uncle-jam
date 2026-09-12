@@ -3,7 +3,20 @@
 // someone supplies an external signal (an "approval"), which is the case
 // a plain linear script can't express but a state machine + snapshot can.
 
-export const orderWorkflow = [
+import type { Step } from "../src/engine.js";
+
+export interface OrderContext {
+  orderId: string;
+  validated?: boolean;
+  approved?: boolean;
+  shipped?: boolean;
+}
+
+export interface ApprovalResumeData {
+  approved: boolean;
+}
+
+export const orderWorkflow: Step<OrderContext, ApprovalResumeData>[] = [
   {
     id: "validate",
     async execute(context) {

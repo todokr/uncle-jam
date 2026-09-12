@@ -2,7 +2,10 @@
 // Mastra uses XState for this; here we hand-roll the same idea so every
 // transition is visible instead of hidden inside a library.
 
-const TRANSITIONS = {
+export type State = "pending" | "running" | "suspended" | "completed" | "failed";
+export type Event = "start" | "step" | "suspend" | "complete" | "fail" | "resume";
+
+const TRANSITIONS: Partial<Record<State, Partial<Record<Event, State>>>> = {
   pending: { start: "running" },
   running: { suspend: "suspended", complete: "completed", fail: "failed", step: "running" },
   suspended: { resume: "running" },
@@ -11,15 +14,17 @@ const TRANSITIONS = {
 };
 
 export class StateMachine {
-  constructor(initial = "pending") {
+  state: State;
+
+  constructor(initial: State = "pending") {
     this.state = initial;
   }
 
-  can(event) {
+  can(event: Event): boolean {
     return Boolean(TRANSITIONS[this.state]?.[event]);
   }
 
-  send(event) {
+  send(event: Event): State {
     const next = TRANSITIONS[this.state]?.[event];
     if (!next) {
       throw new Error(`invalid transition: ${event} from state "${this.state}"`);

@@ -4,13 +4,37 @@
 // here it's a single process so the mechanism stays visible.)
 
 import { StateMachine } from "./fsm.js";
-import { save, load, clear } from "./snapshot.js";
+import { save, load, clear, type Snapshot } from "./snapshot.js";
 
-export async function run(workflow, snapshotPath, { resumeData, context: initialContext = {} } = {}) {
-  let snapshot = await load(snapshotPath);
+export type StepResult<TContext> =
+  | { status: "continue"; context: TContext }
+  | { status: "suspend" }
+  | { status: "fail"; error: Error };
+
+export interface Step<TContext, TResumeData = unknown> {
+  id: string;
+  execute(context: TContext, resumeData?: TResumeData): Promise<StepResult<TContext>>;
+}
+
+export interface RunOptions<TContext, TResumeData> {
+  resumeData?: TResumeData;
+  context?: TContext;
+}
+
+export async function run<TContext, TResumeData = unknown>(
+  workflow: Step<TContext, TResumeData>[],
+  snapshotPath: string,
+  { resumeData, context: initialContext }: RunOptions<TContext, TResumeData> = {},
+): Promise<Snapshot<TContext>> {
+  let snapshot = await load<TContext>(snapshotPath);
 
   if (!snapshot) {
-    snapshot = { state: "pending", stepIndex: 0, context: initialContext, history: [] };
+    snapshot = {
+      state: "pending",
+      stepIndex: 0,
+      context: (initialContext ?? {}) as TContext,
+      history: [],
+    };
   } else if (snapshot.state === "completed" || snapshot.state === "failed") {
     throw new Error(`workflow already ${snapshot.state}; clear the snapshot to run again`);
   }
@@ -29,7 +53,7 @@ export async function run(workflow, snapshotPath, { resumeData, context: initial
   let pendingResumeData = resumeData;
 
   while (fsm.state === "running" && snapshot.stepIndex < workflow.length) {
-    const step = workflow[snapshot.stepIndex];
+    const step = workflow[snapshot.stepIndex]!;
     const result = await step.execute(snapshot.context, pendingResumeData);
     pendingResumeData = undefined;
 
@@ -46,12 +70,12 @@ export async function run(workflow, snapshotPath, { resumeData, context: initial
     if (result.status === "fail") {
       fsm.send("fail");
       snapshot.state = fsm.state;
-      snapshot.error = result.error?.message ?? String(result.error);
+      snapshot.error = result.error.message;
       await save(snapshotPath, snapshot);
       return snapshot;
     }
 
-    snapshot.context = result.context ?? snapshot.context;
+    snapshot.context = result.context;
     snapshot.stepIndex += 1;
     delete snapshot.waitingOn;
     fsm.send("step");
